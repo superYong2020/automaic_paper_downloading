@@ -18,6 +18,18 @@ import threading
 import math
 
 
+def get_proxy_list(file_name):
+    proxy_list = []
+    # ip文件可以浏览我上文链接文章“多线程爬虫——抓取代理ip”
+    f = open(file_name)
+    # 从文件中读取的line会有回车，要把\n去掉
+    line = f.readline().strip('\n')
+    while line:
+        proxy_list.append(line)
+        line = f.readline().strip('\n')
+    f.close()
+    return proxy_list
+
 def GetUserAgent():
     '''
     功能：随机获取HTTP_User_Agent
@@ -88,11 +100,12 @@ def replace(x, old) -> str:
 def download_paper(paper_title, paper_url):
     for i, paper_name in enumerate(paper_title):
         dst_file_name = os.path.join(dst_dir, paper_name+'.pdf')
-        dst_file_name = replace(dst_file_name, ['@', '!', '?', '。', '<', '>'])
+        dst_file_name = replace(dst_file_name, ['@', '!', '?', '。', '：', ':', '<', '>'])
+        print("pdf name: ", dst_file_name)
         if os.path.exists(dst_file_name):
             continue
         response = urlopen(paper_url[i])
-        print(paper_name)
+        print(paper_url[i], paper_name)
         try:
             file = response.read()
             with open(dst_file_name, 'wb') as f:
@@ -116,40 +129,60 @@ if __name__ == '__main__':
         "User-Agent": random.choice(user_agents)
     }
     # 请求url
-    response = requests.get(url_ins, headers=headers).text
+    ip_pool = get_proxy_list("ip.txt")
+    ip = random.choice(ip_pool)
+    proxy = {'http': ip}
+    response = requests.get(url_ins, headers=headers, proxies=proxy).text
     # 匹配论文名称和连接
     paper_url = re.findall(r'href=https://www.aclweb.org/anthology/2020.acl-main.(.*?).pdf data-toggle', response)
     paper_url = ["https://www.aclweb.org/anthology/2020.acl-main."+item+".pdf" for item in paper_url]
     paper_title = re.findall(r'href=/anthology/2020.acl-main.*?/>.*?(.*?)</a>', response)
     paper_title = [item.replace("<span class=acl-fixed-case>", "").replace("</span>", "") for item in  paper_title]
-    print(paper_url[0:3])
     # 下载论文
     dst_dir = "./paper"
     if not os.path.exists(dst_dir):
         os.mkdir(dst_dir)
 
-        # 文件存储
-    threads_num = 4
-    batch_size = math.ceil(len(paper_url) / 4)
-
-    threads_list = []
-
+    # 文件存储
     error_file_name = []
-
-    for index in range(threads_num):
-        if index < threads_num - 1:
-            new_thread = Download_Paper_Thread(index, paper_title[index * batch_size:(index + 1) * batch_size], paper_url[index * batch_size:(index + 1) * batch_size])
-        else:
-            new_thread = Download_Paper_Thread(index, paper_title[index * batch_size:], paper_url[index * batch_size:])
-        # 开启新线程
-        threads_list.append(new_thread)
-
-    for thread in threads_list:
-        thread.start()
-
-    for thread in threads_list:
-        thread.join()
-
-    print("------------------------------------")
+    for i, paper_name in enumerate(paper_title):
+        paper_name = replace(paper_name, ['@', '!', '?', '。', '：', ':','/','\\','∘', '<', '>'])
+        dst_file_name = os.path.join(dst_dir, paper_name+'.pdf')
+        if os.path.exists(dst_file_name):
+            continue
+        response = urlopen(paper_url[i])
+        print(paper_url[i], dst_file_name)
+        try:
+            file = response.read()
+            with open(dst_file_name, 'wb') as f:
+                f.write(file)
+        except Exception as e:
+            print(e)
+            print("unknown name! parser error", dst_file_name)
+            error_file_name.append(dst_file_name)
+    print("----------------------------------")
     for item in error_file_name:
         print(item)
+
+    # 想要提速，也可以考虑使用多线程
+    # threads_num = 4
+    # batch_size = math.ceil(len(paper_url) / 4)
+    #
+    # threads_list = []
+    # for index in range(threads_num):
+    #     if index < threads_num - 1:
+    #         new_thread = Download_Paper_Thread(index, paper_title[index * batch_size:(index + 1) * batch_size], paper_url[index * batch_size:(index + 1) * batch_size])
+    #     else:
+    #         new_thread = Download_Paper_Thread(index, paper_title[index * batch_size:], paper_url[index * batch_size:])
+    #     # 开启新线程
+    #     threads_list.append(new_thread)
+    #
+    # for thread in threads_list:
+    #     thread.start()
+    #
+    # for thread in threads_list:
+    #     thread.join()
+    #
+    # print("------------------------------------")
+    # for item in error_file_name:
+    #     print(item)
